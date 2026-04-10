@@ -1,9 +1,9 @@
-package ps.azure.services.teams_summarizer;
+package com.summarizer.teams;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
+@SpringBootTest(classes = TeamsSummarizerApplication.class)
 class TeamsSummarizerApplicationTests {
 
 	@Test
@@ -11,3 +11,4 @@ class TeamsSummarizerApplicationTests {
 	}
 
 }
+

@@ -31,6 +31,16 @@ Built with **Spring Boot 4.x**, **Azure Communication Services (ACS)**, **local 
       └─────────────┘                             └─────────────┘
 ```
 
+## Repository Structure
+
+```text
+.
+├── app/        # Spring Boot application module (entrypoint, controllers)
+├── infra/      # Infrastructure integrations module (ACS, Whisper, Ollama adapters)
+├── model/      # Shared domain models and DTOs
+└── frontend/   # Angular frontend (separate workspace)
+```
+
 ---
 
 ## 🦾 Stack

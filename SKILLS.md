@@ -2,8 +2,9 @@
 
 ## Skill: scaffold-spring-boot-project
 ### Description
-Create the initial Spring Boot 4.x Maven project with all required dependencies, configuration files,
-package structure, and placeholder classes. The project must compile and start with an empty context.
+Create the initial Spring Boot 4.x Maven multi-module project with all required dependencies,
+configuration files, package structure, and placeholder classes. The project must compile and start
+with an empty context.
 
 ### Dependencies Required
 - `spring-boot-starter-web`
@@ -18,13 +19,21 @@ package structure, and placeholder classes. The project must compile and start w
 - `spring-boot-starter-test`
 - `spring-boot-devtools` (dev only)
 
+### Module Ownership
+- `app` module: Spring Boot entrypoint, controllers, WebSocket/SSE endpoints, orchestration services
+- `infra` module: external adapters and clients (ACS SDK, Whisper HTTP, Ollama HTTP)
+- `model` module: shared domain records, DTOs, and value objects
+- `frontend/` directory: separate Angular workspace (outside Maven modules)
+
 ### Acceptance Criteria
-- Project compiles with `mvn clean compile`
-- Application starts with `mvn spring-boot:run`
+- Project compiles with `./mvnw clean compile`
+- Unit and integration lifecycle runs with `./mvnw verify`
+- Application starts from app module with `./mvnw -pl app spring-boot:run`
 - Actuator health endpoint responds at `/actuator/health`
-- Package structure matches copilot-instructions.md
+- Package structure under `app/src/main/java/com/summarizer/teams` matches `copilot-instructions.md`
+- `model` and `infra` modules are present and build as part of the Maven reactor
 - Java 21 is set as source/target
-- `application.yml` has placeholder config sections for ACS, Whisper, and Ollama
+- `app/src/main/resources/application.yaml` has placeholder config sections for ACS, Whisper, Ollama, and Azure
 
 ---
 
@@ -34,11 +43,11 @@ Implement the ACS Call Automation integration that joins a Microsoft Teams meeti
 audio streaming to a WebSocket endpoint.
 
 ### Components
-- `AcsConfig` — `CallAutomationClient` bean from connection string
-- `MeetingJoinService` — joins a Teams meeting using `TeamsMeetingLinkLocator`, configures
+- `AcsConfig` (app) + ACS client adapter (infra) — `CallAutomationClient` bean from connection string
+- `MeetingJoinService` (app) — joins a Teams meeting using `TeamsMeetingLinkLocator`, configures
   `MediaStreamingOptions` for PCM 16kHz mono unmixed audio over WebSocket
-- `MeetingController` — REST endpoints: `POST /api/meetings/join`, `POST /api/meetings/{id}/leave`
-- `AcsCallbackController` — `POST /api/callbacks` to handle ACS lifecycle events
+- `MeetingController` (app) — REST endpoints: `POST /api/meetings/join`, `POST /api/meetings/{id}/leave`
+- `AcsCallbackController` (app) — `POST /api/callbacks` to handle ACS lifecycle events
   (`CallConnected`, `CallDisconnected`, `ParticipantsUpdated`)
 
 ### Acceptance Criteria
@@ -55,10 +64,10 @@ Implement the WebSocket server that receives real-time audio data streamed from 
 Teams meeting. Parse the JSON metadata and binary PCM audio frames.
 
 ### Components
-- `WebSocketConfig` — registers handler at `/ws/audio-stream`
-- `AudioStreamWebSocketHandler` — handles `AudioMetadata`, `AudioData`, `StoppedMediaStreaming` messages
-- `AudioChunkProcessor` — receives decoded PCM byte arrays with speaker ID and timestamp
-- `AudioBufferAggregator` — accumulates 20ms PCM frames into 30-second windows per speaker
+- `WebSocketConfig` (app) — registers handler at `/ws/audio-stream`
+- `AudioStreamWebSocketHandler` (app/websocket) — handles `AudioMetadata`, `AudioData`, `StoppedMediaStreaming` messages
+- `AudioChunkProcessor` (app/service.audio) — receives decoded PCM byte arrays with speaker ID and timestamp
+- `AudioBufferAggregator` (app/service.audio) — accumulates 20ms PCM frames into 30-second windows per speaker
 
 ### Audio Format
 - PCM 16kHz, 16-bit, mono
@@ -81,9 +90,9 @@ Integrate with a locally running Whisper speech-to-text service to transcribe PC
 into text. Support both whisper.cpp HTTP server and faster-whisper.
 
 ### Components
-- `WhisperTranscriptionService` — sends PCM audio (as WAV) to local Whisper endpoint, returns transcript text
-- `AudioFormatConverter` — converts raw PCM 16kHz 16-bit mono to WAV format for Whisper input
-- `TranscriptEntry` record — holds speaker ID, timestamp range, and transcribed text
+- `WhisperTranscriptionService` (app/service.transcription) — sends PCM audio (as WAV) to local Whisper endpoint, returns transcript text
+- `AudioFormatConverter` (app/service.audio) — converts raw PCM 16kHz 16-bit mono to WAV format for Whisper input
+- `TranscriptEntry` record (model) — holds speaker ID, timestamp range, and transcribed text
 
 ### Configuration
 ```yaml
@@ -110,13 +119,13 @@ First pass uses regex pattern matching. Second pass uses Ollama LLM classificati
 borderline cases.
 
 ### Components
-- `GdprFilterService` — orchestrates the two-pass filtering pipeline
-- `RegexHealthFilter` — pattern-based detection of medical terms, conditions, medications,
+- `GdprFilterService` (app/service.gdpr) — orchestrates the two-pass filtering pipeline
+- `RegexHealthFilter` (app/service.gdpr) — pattern-based detection of medical terms, conditions, medications,
   health phrases common in spoken language, ICD-10 codes
-- `LlmHealthClassifier` — sends borderline text to Ollama to classify if it contains health data
-- `FilterResult` record — holds original text, redacted text, whether it was filtered,
+- `LlmHealthClassifier` (app/service.gdpr using infra Ollama adapter) — sends borderline text to Ollama to classify if it contains health data
+- `FilterResult` record (model) — holds original text, redacted text, whether it was filtered,
   matched terms, and filter reason
-- `GdprAuditLogger` — logs filter decisions (what was filtered, why, when) without logging
+- `GdprAuditLogger` (app/service.gdpr) — logs filter decisions (what was filtered, why, when) without logging
   the redacted content itself
 
 ### Spoken Language Patterns (Non-Exhaustive)
@@ -143,12 +152,12 @@ Integrate with a locally running Ollama instance to produce rolling meeting summ
 filtered transcript text.
 
 ### Components
-- `OllamaSummaryService` — sends filtered transcript to Ollama `/api/generate` endpoint
+- `OllamaSummaryService` (app/service.summary using infra Ollama adapter) — sends filtered transcript to Ollama `/api/generate` endpoint
   with a structured summarization prompt
-- `MeetingSummaryService` — orchestrates the pipeline: filter → summarize → store
-- `MeetingSummary` record — holds summary text, topics, action items, decisions,
+- `MeetingSummaryService` (app/service.summary) — orchestrates the pipeline: filter → summarize → store
+- `MeetingSummary` record (model) — holds summary text, topics, action items, decisions,
   open questions, redacted message count
-- `RollingConversationBuffer` — maintains a sliding window of filtered transcript entries
+- `RollingConversationBuffer` (app/service.summary) — maintains a sliding window of filtered transcript entries
   for periodic re-summarization
 
 ### Prompt Requirements
@@ -181,10 +190,11 @@ ollama:
 ## Skill: angular-frontend
 ### Description
 Build the Angular 18+ frontend that allows users to input a Teams meeting link, join/leave
-meetings, and view live rolling summaries with GDPR filter statistics.
+meetings, and view live rolling summaries with GDPR filter statistics. The frontend lives in
+the top-level `frontend/` directory as a separate workspace.
 
 ### Components
-- Meeting join page: input for Teams meeting link, join/leave buttons
+- `frontend/` Angular app with meeting join page: input for Teams meeting link, join/leave buttons
 - Live summary dashboard: displays structured summary (topics, decisions, action items)
 - GDPR filter indicator: shows count of redacted messages
 - Real-time updates via Server-Sent Events (SSE) from Spring Boot
@@ -204,8 +214,8 @@ Implement Server-Sent Events (SSE) endpoint in Spring Boot to push live summary 
 and transcription status to the Angular frontend.
 
 ### Components
-- `SummaryStreamController` — SSE endpoint at `GET /api/stream/summary/{connectionId}`
-- `SummaryEventPublisher` — publishes summary update events when new summaries are generated
+- `SummaryStreamController` (app/controller) — SSE endpoint at `GET /api/stream/summary/{connectionId}`
+- `SummaryEventPublisher` (app/service.summary) — publishes summary update events when new summaries are generated
 - Event types: `summary-update`, `transcript-entry`, `gdpr-redaction`, `meeting-status`
 
 ### Acceptance Criteria

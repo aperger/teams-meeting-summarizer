@@ -23,7 +23,7 @@ Built with **Spring Boot 4.x**, **Azure Communication Services (ACS)**, **local 
           ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
           │ Angular 18+ │────▶│ Spring Boot │────▶│ Ollama LLM  │
           └─────────────┘     │  4.x, Web   │     │ (local API) │
-            UI + SSE         │  WebSocket   │     └─────────────┘
+             UI + SSE         │  WebSocket  │     └─────────────┘
                               │  REST,      │
       ┌─────────────┐         │  ACS SDK    │     ┌─────────────┐
       │ MS Teams    │────────▶│             │────▶│ Whisper STT │
